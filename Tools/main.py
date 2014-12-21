@@ -2,11 +2,12 @@ import urllib2
 import re
 import os.path
 import numpy as np
-import matplotlib.pyplot
+import matplotlib.pyplot as plt
 
 log = '../Data/PA.log'
 log_url = 'rogue-01.informatik.uni-bonn.de/PA.log'
 log_regex = '64 bytes from (\d*\.\d*\.\d*\.\d*): seq=(\d*) ttl=(\d*) time=(\d*\.\d*) ms'
+log_graph = "../Data/pa_graph.svg"
 
 
 def downloadFile(url='', filename=''):
@@ -101,7 +102,25 @@ def analizeLogFile(f):
 
 
 def plot_log(d):
-    a = 0
+    sorted(d)
+    timestamps = []
+    rtt_min = []
+    rtt_avg = []
+    rtt_max = []
+    for i in d:
+        timestamps.append(i)
+        rtt = []
+        for data in d[i]:
+            rtt.append(float(data[3]))
+        rtt_min.append(np.min(rtt))
+        rtt_max.append(np.max(rtt))
+        rtt_avg.append(np.mean(rtt))
+    plt.plot(timestamps, rtt_max, 'r,')
+    plt.plot(timestamps, rtt_min, 'g,')
+    plt.plot(timestamps, rtt_avg, 'b,')
+    plt.xlabel('Timestamp')
+    plt.ylabel('Time in ms')
+    plt.savefig(log_graph, format='svg', frameon=True)
 
 
 def main():
