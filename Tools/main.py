@@ -3,11 +3,13 @@ import re
 import os.path
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.pyplot
 
 log = '../Data/PA.log'
 log_url = 'rogue-01.informatik.uni-bonn.de/PA.log'
 log_regex = '64 bytes from (\d*\.\d*\.\d*\.\d*): seq=(\d*) ttl=(\d*) time=(\d*\.\d*) ms'
 log_graph = "../Data/pa_graph.svg"
+log_boxplot = "../Data/pa_boxplot.svg"
 
 
 def downloadFile(url='', filename=''):
@@ -122,6 +124,71 @@ def plot_log(d):
     plt.ylabel('Time in ms')
     plt.savefig(log_graph, format='svg', frameon=True)
 
+def boxplot_segmented_data(minTTL, step, segData):
+    curTTL = minTTL
+    allData = []
+    allTTL = []
+    for x in segData:
+        data = []
+        for y in x:
+            for z in x[y]:
+                data.append(float(z[3]))
+        # Pick desired data
+        if not data:
+            # no data here. continue
+            curTTL = curTTL + step
+            continue
+        allData.append(data)
+        allTTL.append(int(curTTL))
+
+
+        #data.append()
+        #plt.boxplot(segData[int(x)])
+        curTTL = curTTL + step
+    plt.boxplot(allData, labels=allTTL)
+    plt.xlabel("TTL [Hop]")
+    plt.ylabel("Time [ms]")
+    plt.savefig(log_boxplot, format='svg', frameon=True)
+    plt.close()
+
+
+def segment_data(inputData):
+    '''
+    Segments data after TTL. Output is guaranteed to be less or equal to 20 entries.
+    Entry might be empty!!
+    :param inputData:
+    :return: minTTL, maxTTL, segmentedData
+    '''
+    minTTL = float("inf") # Infinity, for first check
+    maxTTL = -1
+    for i in inputData:
+        if minTTL > float(inputData[i][0][2]): # Check for smaller TTL
+            minTTL = float(inputData[i][0][2])
+        if maxTTL < float(inputData[i][0][2]): # Check for bigger TTL
+            maxTTL = float(inputData[i][0][2])
+    # In reality: 43.0 minTTL
+    # In reality: 56.0 maxTTL
+    if minTTL == float("inf") or maxTTL == -1:
+        return False # Wut?
+    # Make Segments... for each TTL one. Except when more than say... 20. Then just make 20.
+    if maxTTL == minTTL:
+        return False # I don't want to work with these data.
+    if maxTTL - minTTL <= 20:
+        step = 1
+        max = int(maxTTL-minTTL+0.5)
+    else:
+        step = (maxTTL-minTTL)/20 # Meh... cheap solution, but it works. Keep in mind that TTL are natural numbers
+        max = 20
+    segments = []
+    for x in range(0, max+1, step):
+        segments.insert(x, {})
+    for i in inputData:
+        seg = int((float(inputData[i][0][2])-minTTL) * step + 0.5) # int(x +0.5) rounds x to nearest integer
+        #print(inputData[i][0][2] + " comes in "+str(seg))
+
+        segments[seg][inputData[i][0][0]] = (inputData[i])
+    return minTTL, step, segments
+
 
 def main():
     if not os.path.isfile(log):
@@ -132,7 +199,14 @@ def main():
         f.close()
         print 'Failed to parse file.'
         return 1
+    '''
+        r:
+        {Timestamp: (IP, seq, ttl, time), Timestamp: ...}
+    '''
 
+
+    minTTL, step, TTLData = segment_data(r)
+    boxplot_segmented_data(minTTL, step, TTLData)
     plot_log(r)
 
     f.close()
