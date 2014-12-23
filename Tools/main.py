@@ -194,7 +194,7 @@ def main():
     args = parser.parse_args()
 
     if not os.path.isfile(args.log_file):
-        downloadFile(args.log_url)
+        downloadFile(args.log_url, args.log_file)
     f = file(args.log_file, 'r')
     r = analizeLogFile(f, args.start, args.end)
     f.close()
