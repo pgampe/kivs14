@@ -3,57 +3,38 @@ import re
 import os.path
 import numpy as np
 import matplotlib.pyplot as plt
-import matplotlib.pyplot
-
-log = '../Data/PA.log'
-log_url = 'rogue-01.informatik.uni-bonn.de/PA.log'
-log_regex = '64 bytes from (\d*\.\d*\.\d*\.\d*): seq=(\d*) ttl=(\d*) time=(\d*\.\d*) ms'
-log_graph = "../Data/pa_graph.svg"
-log_boxplot = "../Data/pa_boxplot.svg"
+import argparse
 
 
 def downloadFile(url='', filename=''):
+    """
+    Downloads a file from a server and saves it into a local file
+
+    :param url: The URL to download
+    :param filename: The filename to save the downloaded data to
+    :return: void
+    """
     if url == '' or filename == '':
         return
-    d = getFile(url, ftp=False)
+    d = urllib2.urlopen(url)
     f = open(filename, 'w')
-    f.write(d)
+    f.write(d.read())
     d.close()
     f.close()
 
 
-def getFile(url='', ftp=True, asObject=False):
-    """
-    Fetches the most recent data from the server. Throws URLError if
-    the server is offline or the file can't be found.
-
-    :param url: The URL without a scheme.
-    :param ftp: True if FTP, False if HTTP.
-    :param asObject: If True, this method returns an iterable Object.
-
-    :returns: The recent data as String or Object.
-    """
-    if ftp:
-        response = urllib2.urlopen('ftp://' + url)
-    else:
-        response = urllib2.urlopen('http://' + url)
-    if asObject:
-        return response
-    result = response.read()
-    response.close()
-    return result
-
-
-def analizeLogFile(f):
+def analizeLogFile(f, start, end):
     """
     :param f: The logfile file object
+    :param start: The start time
+    :param end: The end time
     :return: The set data with all data points below each timestamp or False on error
 
     :type f: file
     """
     data = {}
     line = f.readline()
-    regex = re.compile(log_regex)
+    regex = re.compile('64 bytes from (\d*\.\d*\.\d*\.\d*): seq=(\d*) ttl=(\d*) time=(\d*\.\d*) ms')
 
     # iterate file until EOF
     while True:
@@ -83,7 +64,8 @@ def analizeLogFile(f):
                 break
             r = regex.match(line)
             currentSet.append(r.groups())
-        data[timestamp] = currentSet
+        if start < timestamp < end:
+            data[timestamp] = currentSet
 
         # empty line after data block
         if line != '\n':
@@ -103,17 +85,23 @@ def analizeLogFile(f):
     return False
 
 
-def plot_log(d):
-    sorted(d)
+def plot_log(data, log_graph):
+    """
+    Plot the graph for all data points
+    :param data: The log data
+    :param log_graph: The file to save the SVG image
+    :return:
+    """
+    sorted(data)
     timestamps = []
     rtt_min = []
     rtt_avg = []
     rtt_max = []
-    for i in d:
+    for i in data:
         timestamps.append(i)
         rtt = []
-        for data in d[i]:
-            rtt.append(float(data[3]))
+        for values in data[i]:
+            rtt.append(float(values[3]))
         rtt_min.append(np.min(rtt))
         rtt_max.append(np.max(rtt))
         rtt_avg.append(np.mean(rtt))
@@ -123,8 +111,18 @@ def plot_log(d):
     plt.xlabel('Timestamp')
     plt.ylabel('Time in ms')
     plt.savefig(log_graph, format='svg', frameon=True)
+    plt.close()
 
-def boxplot_segmented_data(minTTL, step, segData):
+
+def boxplot_segmented_data(minTTL, step, segData, log_boxplot):
+    """
+    Plots the already segmented data.
+    :param minTTL: The minimum TTL
+    :param step: The step between each plot
+    :param segData: The segmented data
+    :param log_boxplot: The file to save the SVG image
+    :return:
+    """
     curTTL = minTTL
     allData = []
     allTTL = []
@@ -140,12 +138,8 @@ def boxplot_segmented_data(minTTL, step, segData):
             continue
         allData.append(data)
         allTTL.append(int(curTTL))
-
-
-        #data.append()
-        #plt.boxplot(segData[int(x)])
         curTTL = curTTL + step
-    plt.boxplot(allData, labels=allTTL)
+    plt.boxplot(allData)
     plt.xlabel("TTL [Hop]")
     plt.ylabel("Time [ms]")
     plt.savefig(log_boxplot, format='svg', frameon=True)
@@ -184,19 +178,26 @@ def segment_data(inputData):
         segments.insert(x, {})
     for i in inputData:
         seg = int((float(inputData[i][0][2])-minTTL) * step + 0.5) # int(x +0.5) rounds x to nearest integer
-        #print(inputData[i][0][2] + " comes in "+str(seg))
-
         segments[seg][inputData[i][0][0]] = (inputData[i])
     return minTTL, step, segments
 
 
 def main():
-    if not os.path.isfile(log):
-        downloadFile(log_url)
-    f = file(log, 'r')
-    r = analizeLogFile(f)
+    parser = argparse.ArgumentParser(description='Analyze data from PING measurement.')
+    parser.add_argument('--start', default=0, type=int, help='The start time for the plots. Default: %(default)s')
+    parser.add_argument('--end', default=2147483647, type=int, help='The end time for the plots. Default: %(default)s')
+    parser.add_argument('--log-url', default='ftp://rogue-01.informatik.uni-bonn.de/PA.log', help='The URL do download. Default: %(default)s')
+    parser.add_argument('--log-file', default='../Data/PA.log', help='The file to save the log file contents. Default: %(default)s')
+    parser.add_argument('--log-graph', default='../Data/pa_graph.svg', help='The file to save the generated linegraph SVG image. Default: %(default)s')
+    parser.add_argument('--log-boxplot', default='../Data/pa_boxplot.svg', help='The file to save the generated boxplot SVG image. Default: %(default)s')
+    args = parser.parse_args()
+
+    if not os.path.isfile(args.log_file):
+        downloadFile(args.log_url)
+    f = file(args.log_file, 'r')
+    r = analizeLogFile(f, args.start, args.end)
+    f.close()
     if r == False:
-        f.close()
         print 'Failed to parse file.'
         return 1
     '''
@@ -204,12 +205,10 @@ def main():
         {Timestamp: (IP, seq, ttl, time), Timestamp: ...}
     '''
 
-
+    plot_log(r, args.log_graph)
     minTTL, step, TTLData = segment_data(r)
-    boxplot_segmented_data(minTTL, step, TTLData)
-    plot_log(r)
+    boxplot_segmented_data(minTTL, step, TTLData, args.log_boxplot)
 
-    f.close()
     return 0
 
 main()
